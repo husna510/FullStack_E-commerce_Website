@@ -1,0 +1,16 @@
+# Node.js
+node_modules/
+.env
+
+.next/
+/public/images/*.webp
+# Tailwind CSS
+dist/
+
+# TypeScript
+*.tsbuildinfo
+
+# Sanity
+.sanity-backup/
+
+.next

@@ -1,12 +1,145 @@
-import React from "react";
+"use client";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
+import { Product } from "types/products";
+import { getCartItems } from "../actions";
+import { urlFor } from "@/sanity/lib/image";
+import { client } from "@/sanity/lib/client";
 
 const CheckOutPage = () => {
+  const [cartItems, setCartItems] = useState<Product[]>([]);
+  const [discount, setDiscount] = useState<number>(0);
+
+  const [formValues, setFormValues] = useState({
+    firstName: "",
+    lastName: "",
+    companyName: "",
+    region: "",
+    address: "",
+    city: "",
+    province: "",
+    zipCode: "",
+    contact: "",
+    email: "",
+    additionalInfo: "",
+    paymentMethod: "", 
+  });
+
+  const [formErrors, setFormErrors] = useState({
+    firstName: false,
+    address: false,
+    city: false,
+    province: false,
+    zipCode: false,
+    contact: false,
+    email: false,
+    paymentMethod: false,
+  });
+
+  useEffect(() => {
+    setCartItems(getCartItems());
+    const appliedDiscount = localStorage.getItem("appliedDiscount");
+    if (appliedDiscount) {
+      setDiscount(Number(appliedDiscount));
+    }
+  }, []);
+
+  const subTotal = cartItems.reduce(
+    (total, item) => total + item.price * item.inventoryCount,
+    0
+  );
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    setFormValues({
+      ...formValues,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const validateForm = () => {
+    const errors = {
+      firstName: !formValues.firstName,
+      address: !formValues.address,
+      city: !formValues.city,
+      province: !formValues.province,
+      zipCode: !formValues.zipCode,
+      contact: !formValues.contact,
+      email: !formValues.email,
+      paymentMethod: !formValues.paymentMethod,
+    };
+
+    setFormErrors(errors);
+    return Object.values(errors).every((error) => !error);
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!validateForm()) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+
+    const orderData = {
+      _type: "order",
+      firstName: formValues.firstName,
+      lastName: formValues.lastName || null,
+      companyName: formValues.companyName || null,
+      region: formValues.region || null,
+      address: formValues.address,
+      city: formValues.city,
+      province: formValues.province,
+      zipCode: formValues.zipCode,
+      contact: formValues.contact,
+      email: formValues.email,
+      additionalInfo: formValues.additionalInfo || null,
+      cartItems: cartItems.map((item) => ({
+        _type: "reference",
+        _ref: item._id,
+      })),
+      subTotal: subTotal,
+      discount: discount,
+      total: subTotal - discount,
+      paymentMethod: formValues.paymentMethod,
+      orderStatus: "pending",
+      createdAt: new Date().toISOString(),
+    };
+
+    console.log("Order Data:", orderData); 
+
+    try {
+      
+      const result = await client.create(orderData);
+      console.log("Order creation result:", result);
+
+      localStorage.removeItem("appliedDiscount");
+      setCartItems([]); 
+      setFormValues({
+        firstName: "",
+        lastName: "",
+        companyName: "",
+        region: "",
+        address: "",
+        city: "",
+        province: "",
+        zipCode: "",
+        contact: "",
+        email: "",
+        additionalInfo: "",
+        paymentMethod: "Online Payment",
+      });
+      alert("Order placed successfully!");
+    } catch (error) {
+      console.error("Error creating order:", error); 
+      alert("Failed to place order. Please try again.");
+    }
+  };
+
   return (
     <>
       <div>
         <Image
-          src={"/images/checkout.svg"}
+          src="/images/checkout.svg"
           alt="checkout"
           width={1440}
           height={316}
@@ -15,176 +148,94 @@ const CheckOutPage = () => {
       </div>
       <div className="container mx-auto px-4 lg:px-12 mt-16">
         <div className="flex flex-col lg:flex-row items-start justify-between gap-10">
-          {/* Left Side: Billing Form */}
           <div className="w-full lg:w-[60%]">
             <h1 className="text-[36px] font-semibold mb-5">Billing details</h1>
-            <div className="flex flex-wrap items-center justify-start gap-6">
-              <div className="w-full sm:w-auto">
-                <label>
-                  First Name
-                  <br />
-                  <input
-                    type="text"
-                    className="w-full sm:w-[211px] h-[75px] border border-black rounded-md mt-2"
-                  />
-                </label>
+            <form>
+              {Object.keys(formValues).map((key) => {
+                if (key === "paymentMethod") return null; 
+
+                return (
+                  <div key={key} className="mb-4">
+                    <label className="block">
+                      {key.charAt(0).toUpperCase() + key.slice(1)}
+                      <input
+                        type={key === "email" ? "email" : "text"}
+                        name={key}
+                        value={formValues[key as keyof typeof formValues]}
+                        onChange={handleInputChange}
+                        className="w-full border border-black rounded-md p-2 mt-1"
+                      />
+                    </label>
+                    {formErrors[key as keyof typeof formErrors] && (
+                      <p className="text-red-500">This field is required</p>
+                    )}
+                  </div>
+                );
+              })}
+
+              
+              <div className="mb-4">
+                <label className="block font-semibold">Payment Method</label>
+                <div className="flex gap-4 mt-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="Online Payment"
+                      checked={formValues.paymentMethod === "Online Payment"}
+                      onChange={handleInputChange}
+                      className="mr-2"
+                    />
+                    Online Payment
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="Cash on Delivery"
+                      checked={formValues.paymentMethod === "Cash on Delivery"}
+                      onChange={handleInputChange}
+                      className="mr-2"
+                    />
+                    Cash on Delivery
+                  </label>
+                </div>
+                {formErrors.paymentMethod && (
+                  <p className="text-red-500">Please select a payment method</p>
+                )}
               </div>
-              <div className="w-full sm:w-auto">
-                <label>
-                  Last Name
-                  <br />
-                  <input
-                    type="text"
-                    className="w-full sm:w-[211px] h-[75px] border border-black rounded-md mt-2"
-                  />
-                </label>
-              </div>
-            </div>
-            <br />
-            Company Name (Optional)
-            <br />
-            <br />
-            <input
-              type="text"
-              className="w-full lg:w-[453px] h-[75px] border border-black rounded-md"
-            />
-            <br />
-            <br />
-            Country / Region
-            <br />
-            <br />
-            <div className="relative w-full lg:w-[453px] h-[75px]">
-              <input
-                type="text"
-                className="w-full h-full border border-black rounded-md pl-4 pr-10"
-              />
-              <Image
-                src={"/images/arr-ico.svg"}
-                alt="arrow-icon"
-                width={20}
-                height={20}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2"
-              />
-            </div>
-            <br />
-            Street address
-            <br />
-            <br />
-            <input
-              type="text"
-              className="w-full lg:w-[453px] h-[75px] border border-black rounded-md"
-            />
-            <br />
-            <br />
-            Town / City
-            <br />
-            <br />
-            <input
-              type="text"
-              className="w-full lg:w-[453px] h-[75px] border border-black rounded-md"
-            />
-            <br />
-            <br />
-            Province
-            <br />
-            <br />
-            <div className="relative w-full lg:w-[453px] h-[75px]">
-              <input
-                placeholder="Western Province"
-                type="text"
-                className="w-full h-full border border-black rounded-md pl-4 pr-10 text-[#9F9F9F]"
-              />
-              <Image
-                src={"/images/arr-ico.svg"}
-                alt="arrow-icon"
-                width={20}
-                height={20}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2"
-              />
-            </div>
-            <br />
-            ZIP code
-            <br />
-            <br />
-            <input
-              type="text"
-              className="w-full lg:w-[453px] h-[75px] border border-black rounded-md"
-            />
-            <br />
-            <br />
-            Phone
-            <br />
-            <br />
-            <input
-              type="text"
-              className="w-full lg:w-[453px] h-[75px] border border-black rounded-md"
-            />
-            <br />
-            <br />
-            Email address
-            <br />
-            <br />
-            <input
-              type="text"
-              className="w-full lg:w-[453px] h-[75px] border border-black rounded-md"
-            />
-            <br />
-            <br />
-            Additional information
-            <br />
-            <br />
-            <input
-              placeholder="Additional information"
-              type="text"
-              className="w-full lg:w-[453px] h-[75px] border border-black rounded-md text-[#9F9F9F] pl-4"
-            />
+            </form>
           </div>
 
-          {/* Right Side: Order Summary */}
           <div className="w-full lg:w-[35%]">
-            <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-3">
-                <h2 className="text-[24px] font-semibold">Product</h2>
-                <p className="text-[#9F9F9F]">
-                  Asgaard sofa <span className="text-black">X 1</span>
+            <h2 className="text-[24px] font-semibold">Order Summary</h2>
+            {cartItems.map((item) => (
+              <div key={item._id} className="flex items-center gap-4 mt-4">
+                {item.productImage && (
+                  <Image
+                    src={urlFor(item.productImage).url()}
+                    alt={item.title}
+                    width={50}
+                    height={50}
+                  />
+                )}
+                <p>
+                  {item.title} x {item.inventoryCount}
                 </p>
-                <span className="font-semibold">Subtotal</span>
-                <span className="font-semibold">Total</span>
               </div>
-              <div className="flex flex-col gap-3 text-right">
-                <h2 className="text-[24px] font-semibold">Subtotal</h2>
-                <span>Rs. 250,000.00</span>
-                <span>Rs. 250,000.00</span>
-                <span className="text-[#B88E2F] text-[24px] font-semibold">
-                  Rs. 250,000.00
-                </span>
-              </div>
-            </div>
-            <div className="border-b border-[#D9D9D9] w-full mt-6"></div>
-            <div className="mt-8">
-              <div className="flex items-center gap-3">
-                <div className="bg-black rounded-full w-[14px] h-[14px]"></div>
-                <h1 className="text-[20px] font-semibold">
-                  Direct Bank Transfer
-                </h1>
-              </div>
-              <p className="text-[#9F9F9F] mt-2">
-                Make your payment directly into our bank account. Please use
-                your Order ID as the payment reference. Your order will not be
-                shipped until the funds have cleared in our account.
-              </p>
-              <div className="flex items-center gap-3 mt-6">
-                <div className="border border-[#9F9F9F] rounded-full w-[14px] h-[14px]"></div>
-                <h1 className="text-[18px] font-semibold text-[#9F9F9F]">
-                  Cash On Delivery
-                </h1>
-              </div>
-            </div>
-            <div className="mt-10">
-              <button className="w-full lg:w-[318px] h-[64px] border border-black rounded-2xl">
-                Place order
-              </button>
-            </div>
+            ))}
+            <p className="font-semibold mt-4">
+              Subtotal: Rs. {subTotal.toFixed(2)}
+            </p>
+            <p className="font-semibold">
+              Total: Rs. {(subTotal - discount).toFixed(2)}
+            </p>
+            <button
+              onClick={handlePlaceOrder}
+              className="w-full mt-6 bg-black text-white py-2 rounded-md hover:bg-gray-800 hover:scale-105 transition-all duration-300"
+            >
+              Place Order
+            </button>
           </div>
         </div>
       </div>

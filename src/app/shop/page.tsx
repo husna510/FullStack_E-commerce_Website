@@ -1,15 +1,25 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Image from "next/image";
 import ProductList from "@/components/productlist";
 import Navbar from "@/components/Navbar";
 import FilterComponent from "@/components/filters/FilterPanel";
 import { useSearchParams } from "next/navigation";
 
-const ShopPage = () => {
+const SearchParamsHandler = ({ setSearchTerm }: { setSearchTerm: (term: string) => void }) => {
   const searchParams = useSearchParams();
   const searchQuery = searchParams?.get("search") ?? "";
 
+  useEffect(() => {
+    if (searchQuery) {
+      setSearchTerm(searchQuery);
+    }
+  }, [searchQuery]);
+
+  return null; // This component does not render anything
+};
+
+const ShopPage = () => {
   const [filters, setFilters] = useState({
     tag: "",
     priceRange: 0,
@@ -17,14 +27,8 @@ const ShopPage = () => {
     newProductOnly: false,
   });
 
-  const [searchTerm, setSearchTerm] = useState(searchQuery);
+  const [searchTerm, setSearchTerm] = useState("");
   const [totalResults, setTotalResults] = useState(0);
-
-  useEffect(() => {
-    if (searchQuery) {
-      setSearchTerm(searchQuery);
-    }
-  }, [searchQuery]);
 
   const handleSearch = (term: string) => {
     setSearchTerm(term);
@@ -44,15 +48,13 @@ const ShopPage = () => {
         height={316}
         className="w-full mt-20"
       />
-      <FilterComponent
-        applyFilters={applyFilters}
-        totalResults={totalResults}
-      />
-      <ProductList
-        filters={filters}
-        searchTerm={searchTerm}
-        setTotalResults={setTotalResults}
-      />
+
+      <Suspense fallback={<div>Loading filters...</div>}>
+        <SearchParamsHandler setSearchTerm={setSearchTerm} />
+      </Suspense>
+
+      <FilterComponent applyFilters={applyFilters} totalResults={totalResults} />
+      <ProductList filters={filters} searchTerm={searchTerm} setTotalResults={setTotalResults} />
     </>
   );
 };
